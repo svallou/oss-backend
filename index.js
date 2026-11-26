@@ -38,57 +38,53 @@ async function initDb() {
 }
 initDb();
 
-// Проверка работы корня сервера
-app.get('/', (req, res) => {
+// Получить все данные для отрисовки схемы или проверить статус
+app.get('/', async (req, res) => {
+  if (req.query.action === 'residents') {
+    try {
+      const result = await pool.query('SELECT * FROM oss_residents');
+      const residents = {};
+      result.rows.forEach(row => {
+        residents[`apt-${row.apartment_number}`] = {
+          name: row.name,
+          phone: row.phone,
+          vote: row.vote,
+          floor: row.floor
+        };
+      });
+      return res.json(residents);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
   res.json({ status: 'ok', message: 'OSS Backend is running' });
 });
 
-// Получить все данные для отрисовки схемы
-app.get('/api/oss/residents', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM oss_residents');
-    const residents = {};
-    result.rows.forEach(row => {
-      residents[`apt-${row.apartment_number}`] = {
-        name: row.name,
-        phone: row.phone,
-        vote: row.vote,
-        floor: row.floor
-      };
-    });
-    res.json(residents);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // Сохранить данные жильца
-app.post('/api/oss/residents', async (req, res) => {
-  const { apartmentNumber, floor, name, phone, vote } = req.body;
-  if (!apartmentNumber || !floor || !name) {
-    return res.status(400).json({ error: 'Missing required fields' });
+app.post('/', async (req, res) => {
+  if (req.query.action === 'residents') {
+    const { apartmentNumber, floor, name, phone, vote } = req.body;
+    if (!apartmentNumber || !floor || !name) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    try {
+      await pool.query(
+        `INSERT INTO oss_residents (apartment_number, floor, name, phone, vote)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (apartment_number) 
+         DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone, vote = EXCLUDED.vote, updated_at = CURRENT_TIMESTAMP`,
+        [apartmentNumber, floor, name, phone, vote]
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
   }
-  try {
-    await pool.query(
-      `INSERT INTO oss_residents (apartment_number, floor, name, phone, vote)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (apartment_number) 
-       DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone, vote = EXCLUDED.vote, updated_at = CURRENT_TIMESTAMP`,
-      [apartmentNumber, floor, name, phone, vote]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+  res.status(404).json({ error: 'Unknown action' });
 });
 
-// Запуск сервера при прямом вызове и экспорт для платформы Onreza
-if (require.main === module) {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`OSS backend listening on port ${PORT}`);
-  });
-}
-
-module.exports = app;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`OSS backend listening on port ${PORT}`);
+});

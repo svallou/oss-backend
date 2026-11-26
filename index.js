@@ -6,8 +6,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: 'https://svallou.github.io'
+  origin: 'https://svallou.github.io',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type']
 }));
+app.options('*', cors());
 app.use(express.json());
 
 const pool = new Pool({
@@ -34,6 +37,11 @@ async function initDb() {
   }
 }
 initDb();
+
+// Проверка работы корня сервера
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'OSS Backend is running' });
+});
 
 // Получить все данные для отрисовки схемы
 app.get('/api/oss/residents', async (req, res) => {
@@ -76,6 +84,11 @@ app.post('/api/oss/residents', async (req, res) => {
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`OSS backend listening on port ${PORT}`);
-});
+// Запуск сервера при прямом вызове и экспорт для платформы Onreza
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`OSS backend listening on port ${PORT}`);
+  });
+}
+
+module.exports = app;
